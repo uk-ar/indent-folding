@@ -99,7 +99,7 @@
   (let ((has-child nil))
     (save-excursion
       (goto-char start)
-      (forward-to-indentation)
+      ;; (forward-to-indentation)
       (let* ((next-region (indent-folding-forward-indentation))
              (next-start (nth 1 next-region)))
         (while (and (not (eobp)) (<= next-start end))
@@ -108,9 +108,9 @@
           (goto-char (1+ next-start))
           (setq next-region (indent-folding-forward-indentation))
           (setq next-start (nth 1 next-region))
-          )))
+          ))
     has-child
-    ))
+    )))
 
 (defun indent-folding-overlays-in (start end)
   (delq nil
@@ -151,7 +151,7 @@
            (= (overlay-end (car overlays)) end)
            )
       (mapc 'delete-overlay overlays)
-      (if (indent-folding-region start end)
+      (if (indent-folding-region (1+ start) end)
           (message "CHILDREN" )
         (message "SUBTREE (NO CHILDREN)")
         )
