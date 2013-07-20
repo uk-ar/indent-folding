@@ -160,17 +160,18 @@
         (message "SUBTREE")
         ;; (message "SUBTREE (NO CHILDREN)")
         ))))
-;; (forward-to-indentation)
 
 (defun indent-folding ()
   (interactive)
   (let* ((last-point (point))
          (indent-folding-mode nil)
-         (command (key-binding (this-command-keys-vector))))
+         (command (key-binding (this-command-keys-vector)))
+         (region (region-active-p));; for indent removes mark
+         )
     (when (commandp command)
       (call-interactively command))
-    (when (and (equal last-point (point))
-               (not mark-active))
+    (when (and (not region)
+               (equal last-point (point)))
       (indent-folding-1))
     ))
 
