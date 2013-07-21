@@ -75,6 +75,10 @@
       )
     ))
 
+(defun indent-folding-delete (overlay is-after begin end &optional len)
+  (delete-overlay overlay)
+  )
+
 (defun indent-folding-make-overlay (region)
   (let ((start (car region))
         (end (nth 1 region)))
@@ -84,9 +88,14 @@
         ;; (- end 1)
         ;; 1- for exclude close blacket
         (overlay-put overlay 'invisible t)
+        (overlay-put overlay 'evaporate t)
         (overlay-put overlay 'isearch-open-invisible 'delete-overlay)
-        (overlay-put overlay 'before-string "...")
+        ;; (overlay-put overlay 'before-string "...")
+        (overlay-put overlay 'after-string "...")
         (overlay-put overlay 'face 'indent-folding)
+        ;; (overlay-put overlay 'insert-in-front-hooks '(indent-folding-delete))
+        ;; (overlay-put overlay 'insert-behind-hooks '(indent-folding-delete))
+        (overlay-put overlay 'modification-hooks '(indent-folding-delete))
         )
       )))
 
