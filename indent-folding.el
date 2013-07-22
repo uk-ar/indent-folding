@@ -22,37 +22,22 @@
 ;; MA 02111-1307 USA
 ;;
 ;;-------------------------------------------------------------------
-
+;;; Commentary:
 ;; ToDo:support flinge
 ;; selective-display cannot support region
 
-;;;###autoload
-(define-minor-mode indent-folding-mode
-  "Toggle indent-folding mode"
-  :keymap (make-sparse-keymap)
-  )
-
-(defcustom indent-folding-disable-modes '(org-mode)
-  "Major modes `indent-folding-mode' can not run on."
+;;; Code:
+(defcustom indent-folding-show-temp t
+  nil
   :group 'indent-folding)
 
-(defun indent-folding-mode-maybe ()
-  "What buffer `indent-folding-mode' prefers."
-  (when (and (not (minibufferp (current-buffer)))
-             (not (memq major-mode indent-folding-disable-modes))
-             ;; minor-mode
-             (indent-folding-mode 1)
-             )))
+;; (setq indent-folding-show-temp t)
 
-;;;###autoload
-(define-global-minor-mode global-indent-folding-mode
-  indent-folding-mode
-  indent-folding-mode-maybe ;turn on
-  ;; :init-value t bug?
-  :group 'indent-folding)
+(defvar indent-folding-unfolded-overlays nil
+  nil)
+(make-variable-buffer-local 'indent-folding-unfolded-overlays)
 
-;; setup
-(global-indent-folding-mode t)
+(defvar indent-folding-post-folding nil)
 
 (defun indent-folding-forward-indentation (&optional column)
   (save-excursion
@@ -75,9 +60,15 @@
       )
     ))
 
+(defun indent-folding-delete-overlay (overlay)
+  (when (eq (overlay-get overlay 'face) 'indent-folding)
+    ;; (with-silent-modifications
+    ;;   (set-text-properties ...))
+    (delete-overlay overlay)
+    overlay))
+
 (defun indent-folding-delete (overlay is-after begin end &optional len)
-  (delete-overlay overlay)
-  )
+  (indent-folding-delete-overlay overlay))
 
 (defun indent-folding-make-overlay (region)
   (let ((start (car region))
@@ -87,21 +78,42 @@
       (let ((overlay (make-overlay start end)))
         ;; (- end 1)
         ;; 1- for exclude close blacket
-        (overlay-put overlay 'invisible t)
         (overlay-put overlay 'evaporate t)
-        (overlay-put overlay 'isearch-open-invisible 'delete-overlay)
-        ;; (overlay-put overlay 'before-string "...")
-        (overlay-put overlay 'after-string "...")
+        (overlay-put overlay 'isearch-open-invisible 'indent-folding-delete-overlay)
+        (overlay-put overlay 'display "...")
         (overlay-put overlay 'face 'indent-folding)
-        ;; (overlay-put overlay 'insert-in-front-hooks '(indent-folding-delete))
-        ;; (overlay-put overlay 'insert-behind-hooks '(indent-folding-delete))
+        (overlay-put overlay 'insert-in-front-hooks '(indent-folding-delete))
+        (overlay-put overlay 'insert-behind-hooks '(indent-folding-delete))
         (overlay-put overlay 'modification-hooks '(indent-folding-delete))
+        (setq indent-folding-post-folding t)
         )
       )))
 
-(defface indent-folding nil
-  "Face for indent-folding"
-  );'((t (:background "white"))) nil)
+(defface indent-folding
+  nil "Face for indent-folding"
+  :group 'indent-folding)
+;; todo darkcolor
+;; '((t (:foreground "white" :background "red"))) nil)
+;;   '((t (:background "white"))) nil)
+
+(defun indent-folding-temp-show ()
+  (when indent-folding-unfolded-overlays
+    (mapc
+     (lambda (overlay)
+       (when (eq (overlay-get overlay 'face) 'indent-folding)
+         (overlay-put overlay 'display "...")
+         overlay))
+     indent-folding-unfolded-overlays))
+  (if indent-folding-post-folding
+      (setq indent-folding-post-folding nil)
+    (setq indent-folding-unfolded-overlays
+          (delq nil
+                (mapcar
+                 (lambda (overlay)
+                   (when (eq (overlay-get overlay 'face) 'indent-folding)
+                     (overlay-put overlay 'display nil)
+                     overlay))
+                 (overlays-at (point)))))))
 
 (defun indent-folding-region (start end)
   (interactive "r\nP")
@@ -132,7 +144,7 @@
 (defun indent-folding-show-all ()
   (interactive)
   (let ((overlays (indent-folding-overlays-in (point-min) (point-max))))
-    (when overlays (mapc 'delete-overlay overlays))))
+    (when overlays (mapc 'indent-folding-delete-overlay overlays))))
 
 (defun indent-folding-hide-all ()
   (interactive)
@@ -159,13 +171,13 @@
            (= (overlay-start (car overlays)) start)
            (= (overlay-end (car overlays)) end)
            )
-      (mapc 'delete-overlay overlays)
+      (mapc 'indent-folding-delete-overlay overlays)
       (if (indent-folding-region (1+ start) end)
           (message "CHILDREN" )
         (message "SUBTREE (NO CHILDREN)")
         )
       )
-     (t (mapc 'delete-overlay overlays)
+     (t (mapc 'indent-folding-delete-overlay overlays)
         (message "SUBTREE")
         ;; (message "SUBTREE (NO CHILDREN)")
         ))))
@@ -183,6 +195,40 @@
                (equal last-point (point)))
       (indent-folding-1))
     ))
+;;;###autoload
+(define-minor-mode indent-folding-mode
+  "Toggle indent-folding mode"
+  :keymap (make-sparse-keymap)
+  (if indent-folding-mode indent-folding-show-temp
+    (add-hook 'post-command-hook 'indent-folding-temp-show)
+    (progn
+      (remove-hook 'post-command-hook 'indent-folding-temp-show)
+      (indent-folding-show-all)
+      (setq indent-folding-unfolded-overlays nil)
+      (setq indent-folding-post-folding nil)
+      )))
+
+(defcustom indent-folding-disable-modes '(org-mode)
+  "Major modes `indent-folding-mode' can not run on."
+  :group 'indent-folding)
+
+(defun indent-folding-mode-maybe ()
+  "What buffer `indent-folding-mode' prefers."
+  (when (and (not (minibufferp (current-buffer)))
+             (not (memq major-mode indent-folding-disable-modes))
+             ;; minor-mode
+             (indent-folding-mode 1)
+             )))
+
+;;;###autoload
+(define-global-minor-mode global-indent-folding-mode
+  indent-folding-mode
+  indent-folding-mode-maybe ;turn on
+  ;; :init-value t bug?
+  :group 'indent-folding)
+
+;; setup
+(global-indent-folding-mode t)
 
 ;; (define-key indent-folding-mode-map "b" 'self-insert-command)
 (define-key indent-folding-mode-map (kbd "TAB") 'indent-folding)
